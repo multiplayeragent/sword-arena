@@ -828,6 +828,7 @@ document.addEventListener("touchmove", (e) => e.preventDefault(), { passive: fal
 let last = performance.now(), lastHb = 0, lastHud = 0;
 const orbit = { a: 0.6, look: new THREE.Vector3(0, 1, 0), focus: null, focusAt: 0 };
 function frame(now) {
+  requestAnimationFrame(frame);
   const dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = now; // the first frame can be stamped before `last`
   if (now - lastHb > 1000) { lastHb = now; net.me.set("hb", Date.now()); fixColor(); }
   if (isHost()) hostTick(dt, now); else host.wasHost = false;
@@ -850,7 +851,6 @@ function frame(now) {
   if (shake > 0) { shake = Math.max(0, shake - dt * 2); camera.position.x += (Math.random() - 0.5) * shake * 0.4; camera.position.y += (Math.random() - 0.5) * shake * 0.4; }
   renderer.render(scene, camera);
   if (m && now - lastHud > 100) { lastHud = now; hud(m, now); }
-  requestAnimationFrame(frame);
 }
 /** ?attract and behind the start card: circle slowly round one duel (whoever swung last and
  *  their nearest rival), close enough to see the swings. */
