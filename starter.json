@@ -1,0 +1,21 @@
+{
+  "name": "Sword Arena",
+  "genre": "fighting",
+  "dim": "3D",
+  "mode": "Versus",
+  "players": "2–6",
+  "hook": "Swing, block, roll. Last knight standing scores.",
+  "how": "Knights fight on a floating stone arena. Three swings in a row end in a big overhead hit, a raised shield stops a swing and leaves the attacker reeling, and a roll dodges anything. Knock a rival out or off the edge; first to 5 knockouts wins.",
+  "controls": "WASD and mouse, click to swing, hold right-click or Shift to block, Space to roll. On a phone: left thumb moves, drag to look, SWING, BLOCK and ROLL buttons",
+  "uses": [
+    ["Leaderboard", "The most knockouts anyone has scored in one match."],
+    ["Host-run rounds", "One player's browser counts the knockouts, runs the clock and calls the winner; if it leaves, the next player takes over."],
+    ["Bots", "Bot knights circle, swing, block and roll until enough people join."],
+    ["Live sync", "Every swing, block and roll shows up for everyone at once."]
+  ],
+  "ideas": [
+    "Give everyone a bow for a ranged attack",
+    "Make the arena shrink as the match goes on",
+    "Add a power-up that makes your sword huge"
+  ]
+}
