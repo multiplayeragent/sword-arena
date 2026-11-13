@@ -23,14 +23,16 @@
   #hurt { inset: 0; background: radial-gradient(circle, transparent 45%, #ff1f3d 135%); opacity: 0; }
   #msg { top: 26%; left: 0; right: 0; text-align: center; font-size: 24px; padding: 0 16px; }
   #help { top: 15%; left: 0; right: 0; text-align: center; font-size: 15px; font-weight: 700; padding: 0 16px; transition: opacity 1s; }
+  @media (max-width: 560px) { #help { top: auto; bottom: calc(max(30px, env(safe-area-inset-bottom)) + 210px); } } /* on a phone the kill feed sits where the help line was */
   #net { bottom: max(10px, env(safe-area-inset-bottom)); left: 50%; transform: translateX(-50%); font-size: 12px; font-weight: 600; opacity: .85; white-space: nowrap; }
   .screen { position: fixed; inset: 0; display: grid; place-items: center; background: #2a1630a0; }
-  .card { width: min(380px, 90vw); max-height: 86vh; overflow: auto; padding: 20px; border-radius: 16px; background: #3a2144; border: 1px solid #ffffff2a; text-align: center; }
+  .card { width: min(380px, calc(100vw - 32px)); box-sizing: border-box; max-height: 86vh; overflow: auto; padding: 20px; border-radius: 16px; background: #3a2144; border: 1px solid #ffffff2a; text-align: center; }
   .card h2 { margin: 0 0 6px; font-size: 24px; }
   .card h3 { margin: 14px 0 4px; font-size: 14px; color: #ffd23f; text-align: left; }
   .card ol { margin: 0; padding-left: 24px; font-size: 14px; text-align: left; }
   .card li span { float: right; font-variant-numeric: tabular-nums; }
   .card li.me { color: #ffd23f; font-weight: 700; }
+  .card li.note { list-style: none; margin-left: -24px; opacity: .8; } /* a message, not a ranked line */
   .card li i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
   .card p { margin: 10px 0 0; font-size: 13px; opacity: .85; }
   button.go { width: 100%; min-height: 48px; margin-top: 14px; border: 0; border-radius: 12px; background: #ff7a45; color: #fff; font: 800 17px system-ui, sans-serif; cursor: pointer; }
@@ -60,7 +62,7 @@
 </div></div>
 <div class="screen" id="over" hidden><div class="card">
   <h2 id="winner"></h2><ol id="results"></ol>
-  <h3>Most knockouts in one match</h3><ol id="board"><li>Loading…</li></ol>
+  <h3>Most knockouts in one match</h3><ol id="board"><li class="note">Loading…</li></ol>
   <button class="go" id="again">Play again</button><p id="next"></p>
 </div></div>
 <script type="module">
@@ -126,6 +128,7 @@ const CONFIG = {
   speed: 6.4,
   radius: 13,           // the arena floor; step past it and you fall
   look: 0.0024,         // mouse sensitivity (touch uses 2.4x)
+  shoulder: 1.1,        // the camera looks over your right shoulder, so your own knight doesn't hide the one you fight
   botAggro: 0.55,       // chance a bot in reach swings each time it thinks
   botBlock: 0.45,       // chance a bot raises its shield when you wind up
   botRoll: 0.12,        // chance a bot rolls instead
@@ -358,8 +361,9 @@ function placeView(id, color, name, s, bot, dt, now) {
 }
 function syncViews(dt, now) {
   const seen = new Set();
+  const live = livePlayers();
   for (const [id, p] of Object.entries(S.entities.players || {})) {
-    if (id === net.sessionId) continue;
+    if (id === net.sessionId || !live.includes(id)) continue; // a closed or frozen tab: not drawn, and nobody fights it
     const s = cached("p:" + id, p.p, null); if (!s) continue;
     seen.add(id); placeView(id, p.c || "#ccc", p.n || "Player", s, false, dt, now);
   }
@@ -607,6 +611,11 @@ function fighters() {
   if (isHost()) for (const b of host.bots.values()) if (b.alive && !b.falling) out.push(b);
   return out;
 }
+/** A bot rolls sideways, but never off the edge: the other way if that one lands on the floor, else not at all. */
+function botRoll(b, now, dx, dz) {
+  const l = Math.hypot(dx, dz) || 1, len = (CONFIG.rollSpeed * CONFIG.rollMs) / 1000, lands = (s) => Math.hypot(b.x + (dx / l) * len * s, b.z + (dz / l) * len * s) < R - 1;
+  if (lands(1)) tryRoll(b, now, dx, dz); else if (lands(-1)) tryRoll(b, now, -dx, -dz);
+}
 function tickBots(dt, now, m) {
   fillBots();
   const all = fighters();
@@ -622,9 +631,9 @@ function tickBots(dt, now, m) {
       if (t && m.phase === "play" && !b.act) {
         const winding = t.act === "s" && now - t.actAt < swingOf(t).to && d < 3.6;
         if (winding && Math.random() < CONFIG.botBlock) b.blockUntil = now + 500 + Math.random() * 300;
-        else if (winding && Math.random() < CONFIG.botRoll * 2) tryRoll(b, now, -(t.z - b.z) * b.circle, (t.x - b.x) * b.circle);
+        else if (winding && Math.random() < CONFIG.botRoll * 2) botRoll(b, now, -(t.z - b.z) * b.circle, (t.x - b.x) * b.circle);
         else if (d < 2.4 && Math.random() < CONFIG.botAggro) { b.yaw = Math.atan2(t.x - b.x, t.z - b.z); trySwing(b, now, foes); if (Math.random() < 0.65) b.queued = true; }
-        else if (d < 3 && Math.random() < CONFIG.botRoll * 0.4) tryRoll(b, now, -(t.z - b.z) * b.circle, (t.x - b.x) * b.circle);
+        else if (d < 3 && Math.random() < CONFIG.botRoll * 0.4) botRoll(b, now, -(t.z - b.z) * b.circle, (t.x - b.x) * b.circle);
       }
     }
     const t = foes.find((o) => o.id === b.target);
@@ -755,11 +764,11 @@ function hud(m, now) {
 }
 function showBoard(m) {
   const list = $("board"), mine = m.k[net.sessionId] || 0;
-  if (!board) { list.innerHTML = "<li>Leaderboards need a connection.</li>"; return; }
-  list.innerHTML = "<li>Loading…</li>";
+  if (!board) { list.innerHTML = "<li class='note'>Leaderboards need a connection.</li>"; return; }
+  list.innerHTML = "<li class='note'>Loading…</li>";
   (mine > 0 && me.submitted !== m.id ? board.submit(mine).catch(() => null) : Promise.resolve()).then(() => board.top(10)).then(({ entries }) => {
-    list.innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${e.score}</span></li>`).join("") : "<li>No knockouts yet. Score the first.</li>";
-  }).catch(() => { list.innerHTML = "<li>Couldn't load the leaderboard.</li>"; });
+    list.innerHTML = entries.length ? entries.map((e) => `<li>${esc(e.username || "Player")}<span>${e.score}</span></li>`).join("") : "<li class='note'>No knockouts yet. Score the first.</li>";
+  }).catch(() => { list.innerHTML = "<li class='note'>Couldn't load the leaderboard.</li>"; });
   me.submitted = m.id;
 }
 $("again").onclick = () => { const m = match(); if (m && m.phase === "over") { me.ready = m.id; net.me.set("rdy", m.id); } };
@@ -768,7 +777,7 @@ $("again").onclick = () => { const m = match(); if (m && m.phase === "over") { m
 function fixColor() {
   const others = Object.entries(S.entities.players || {}).filter(([id]) => id !== net.sessionId);
   if (!others.some(([id, p]) => p.c === myColor && id < net.sessionId)) return;
-  const taken = new Set(others.map(([, p]) => p.c));
+  const taken = new Set([...others.map(([, p]) => p.c), ...botList().map((b) => b.col)]); // a bot's color too, or the host recolors the bots mid-match
   myColor = COLORS.find((c) => !taken.has(c)) || myColor; net.me.set("c", myColor);
 }
 
@@ -844,11 +853,11 @@ function frame(now) {
   me.model.g.visible = me.alive;
   if (me.alive) poseKnight(me.model, { x: me.x, y: me.y, z: me.z, yaw: me.yaw, act: me.act, combo: me.combo, t: now - me.actAt, speed: me.speed, flash: me.flash }, dt);
   if (me.act === "s" && me.q !== me.trailQ) { me.trailQ = me.q; trailFx(me, me.combo); sfx("swish"); }
-  if (isHost()) for (const b of host.bots.values()) if (b.act === "s" && b.q !== b.trailQ) { b.trailQ = b.q; trailFx(views.get(b.id) || b, b.combo); sfx("swish", b); }
   tickEffects(dt, now);
   if (ATTRACT || !me.joined) orbitCam(dt, now);
   else { // behind and above you, where the mouse points it
-    const tall = camera.aspect < 1, back = tall ? 7.6 : 6.2, height = (tall ? 2 : 1.4) + camPitch * 4.5, tx = me.x, tz = me.z, ty = Math.max(me.y, -3); // a phone held upright sits farther back
+    const tall = camera.aspect < 1, back = tall ? 7.6 : 6.2, height = (tall ? 2 : 1.4) + camPitch * 4.5, ty = Math.max(me.y, -3); // a phone held upright sits farther back
+    const side = CONFIG.shoulder * (tall ? 0.6 : 1), tx = me.x - Math.cos(camYaw) * side, tz = me.z + Math.sin(camYaw) * side; // over the right shoulder
     const want = new THREE.Vector3(tx - Math.sin(camYaw) * back * Math.cos(camPitch * 0.6), ty + height, tz - Math.cos(camYaw) * back * Math.cos(camPitch * 0.6));
     camera.position.lerp(want, 1 - Math.exp(-dt * 12));
     camera.lookAt(tx + Math.sin(camYaw) * 1.5, ty + 1.3, tz + Math.cos(camYaw) * 1.5);
